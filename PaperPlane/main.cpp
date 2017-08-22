@@ -6,7 +6,7 @@ const float SIDE_WALL_WIDTH = 0.1f;
 const float BARRIER_INTERVAL = 0.5f;
 const float INITIAL_BARRIER_HEIGHT = 0.1f;
 const float PLANE_POS_Y = 0.2f;
-const unsigned int MAX_DIRECTION = 2;
+const unsigned int MAX_DIRECTION = 3;
 
 GLuint compileShader(const char* filename, GLenum type) {
 	const GLuint shader = glCreateShader(type);
@@ -167,7 +167,6 @@ public:
 		glDeleteVertexArrays(1, &vertexArray_);
 	}
 
-
 	void update(float speedY) {
 		mileage_ += speedY;
 
@@ -298,54 +297,57 @@ int main() {
 
 	float planePosX = 0.5f;
 	int direction = 0;
+	unsigned int framesSinceLast = 0;
 	Level level;
 
 	glfwSwapInterval(1); // FIXME
 	glfwSetInputMode(window, GLFW_STICKY_KEYS, GLFW_TRUE);
 
-	bool leftRepeated = false, rightRepeated = false;
 	while (!glfwWindowShouldClose(window)) {
-		if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
-			if (!leftRepeated) {
-				direction = std::max(direction - 1, -static_cast<int>(MAX_DIRECTION));
-				leftRepeated = true;
+		if (glfwGetWindowAttrib(window, GLFW_FOCUSED)) {
+			const bool leftPressed = glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS;
+			const bool rightPressed = glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS;
+
+			if (leftPressed ^ rightPressed) {
+				++framesSinceLast;
+				if (framesSinceLast > 10) {
+					if (leftPressed) {
+						direction = std::max(direction - 1, -static_cast<int>(MAX_DIRECTION));
+					}
+					if (rightPressed) {
+						direction = std::min(direction + 1, static_cast<int>(MAX_DIRECTION));
+					}
+					framesSinceLast = 0;
+				}
+			} else {
+				framesSinceLast = 0;
 			}
-		} else {
-			leftRepeated = false;
-		}
-		if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
-			if (!rightRepeated) {
-				direction = std::min(direction + 1, static_cast<int>(MAX_DIRECTION));
-				rightRepeated = true;
+
+			static constexpr float PI = 3.141593f;
+			static constexpr std::array<float, MAX_DIRECTION + 1> ANGLES = {
+				0.f, PI / 6.f, PI / 4.f, PI / 3.f
+			};
+			const float angle = (direction > 0 ? 1 : -1) * ANGLES[std::abs(direction)];
+
+			const float planeSpeed = 2e-4f * level.getMileage() + 5e-3f;
+			planePosX += std::sin(angle) * planeSpeed;
+
+			if (level.hit(planePosX)) {
+				exit(0);
 			}
-		} else {
-			rightRepeated = false;
+
+			level.update(std::cos(angle) * planeSpeed);
+
+			const auto score = static_cast<unsigned int>(level.getMileage() * 3.f);
+			std::stringstream ss;
+			ss << "Paper Plane / Score: " << score;
+			glfwSetWindowTitle(window, ss.str().c_str());
+
+			glClear(GL_COLOR_BUFFER_BIT);
+			level.draw(planePosX);
+
+			glfwSwapBuffers(window);
 		}
-
-		static constexpr float PI = 3.141593f;
-		static constexpr std::array<float, MAX_DIRECTION + 1> ANGLES = {
-			0.f, PI / 6.f, PI / 3.f
-		};
-		const float angle = (direction > 0 ? 1 : -1) * ANGLES[std::abs(direction)];
-
-		const float planeSpeed = 2e-4f * level.getMileage() + 5e-3f;
-		planePosX += std::sin(angle) * planeSpeed;
-
-		if (level.hit(planePosX)) {
-			exit(0);
-		}
-
-		level.update(std::cos(angle) * planeSpeed);
-
-		const auto score = static_cast<unsigned int>(level.getMileage() * 3.f);
-		std::stringstream ss;
-		ss << "Paper Plane / Score: " << score;
-		glfwSetWindowTitle(window, ss.str().c_str());
-
-		glClear(GL_COLOR_BUFFER_BIT);
-		level.draw(planePosX);
-
-		glfwSwapBuffers(window);
 		glfwPollEvents();
 	}
 
